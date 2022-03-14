@@ -7,8 +7,11 @@ RUN pip install --upgrade pip
 
 # Install requirements for the app
 RUN pip install -r requirements.txt
+# to be removed later.
+RUN apt-get update && apt-get install -y git
 
-# Get the spacy model
+RUN python -m pip install git+https://github.com/richardbeare/MedCAT@Shelve113 --upgrade
+
 RUN python -m spacy download en_core_web_md     
 RUN python -m spacy download en_core_web_lg
 

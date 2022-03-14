@@ -175,46 +175,60 @@ class MedCatProcessor(NlpProcessor):
         """
         Loads MedCAT resources and creates CAT instance
         """
-        if os.getenv("APP_MODEL_VOCAB_PATH") is None:
+
+        cat, cdb, vocab, config = None, None, None, None
+
+        if os.getenv("APP_MODEL_VOCAB_PATH") is None and os.getenv("APP_MEDCAT_VOCAB_SQLITE_PATH") is None:
             raise ValueError("Vocabulary (env: APP_MODEL_VOCAB_PATH) not specified")
 
         if os.getenv("APP_MODEL_CDB_PATH") is None:
             raise Exception("Concept database (env: APP_MODEL_CDB_PATH) not specified")
 
-        # Vocabulary and Concept Database are mandatory
-        self.log.debug('Loading VOCAB ...')
-        vocab = Vocab()
+        model_cdb_sqlite_path = os.getenv("APP_MEDCAT_CDB_SQLITE_PATH", None)
+        model_vocab_sqlite_path = os.getenv("APP_MEDCAT_VOCAB_SQLITE_PATH", None)
+        model_cdb_path = os.getenv("APP_MODEL_CDB_PATH", None)
+        if model_vocab_sqlite_path is not None:
+            self.log.debug('Loading sqlite VOCAB ...')        
+            vocab = Vocab.loadsqlite(model_vocab_sqlite_path)
+        else:
+            # Vocabulary and Concept Database are mandatory
+            self.log.debug('Loading VOCAB ...')
+            vocab = Vocab()
+            with open(os.getenv("APP_MODEL_VOCAB_PATH"), "rb") as f:
+                data = pickle.load(f)
+                if isinstance(data, dict):
+                    vocab.__dict__ = data
+                else:
+                    vocab = data
 
-        with open(os.getenv("APP_MODEL_VOCAB_PATH"), "rb") as f:
-            data = pickle.load(f)
-            if isinstance(data, dict):
-                vocab.__dict__ = data
-            else:
-                vocab = data
+        if model_cdb_sqlite_path is not None and model_cdb_path is not None:
+            self.log.debug('Loading sqlite CDB ...')
+            cdb = CDB.loadsqlite(model_cdb_path, model_cdb_sqlite_path)
+            conf = cdb.config
+        else:
+            self.log.debug('Loading CDB ...')
 
-        self.log.debug('Loading CDB ...')
+            conf = Config()
+            conf.general["spacy_model"] = os.getenv("SPACY_MODEL", "en_core_sci_md") 
 
-        conf = Config()
-        conf.general["spacy_model"] = os.getenv("SPACY_MODEL", "en_core_sci_md") 
-
-        cdb = CDB(conf)
+            cdb = CDB(conf)
         
-        with open(os.getenv("APP_MODEL_CDB_PATH"), "rb") as f:
-            data = dill.load(f)
-            if isinstance(data, dict):
-                if "cdb" in data.keys() and isinstance(data["cdb"], dict):
-                    cdb.__dict__ = data["cdb"]
+            with open(os.getenv("APP_MODEL_CDB_PATH"), "rb") as f:
+                data = dill.load(f)
+                if isinstance(data, dict):
+                    if "cdb" in data.keys() and isinstance(data["cdb"], dict):
+                        cdb.__dict__ = data["cdb"]
+                    else:
+                        cdb = data
+
+                        if "config" in data.keys() and isinstance(data["config"], dict):
+                            conf.__dict__ = data["config"]
+                        else:
+                            conf = data["config"]
                 else:
                     cdb = data
 
-                if "config" in data.keys() and isinstance(data["config"], dict):
-                    conf.__dict__ = data["config"]
-                else:
-                    conf = data["config"]
-            else:
-                cdb = data
-
-        cdb.config = conf
+            cdb.config = conf
 
         # Apply CUI filter if provided
         if os.getenv("APP_MODEL_CUI_FILTER_PATH") is not None:
