@@ -61,6 +61,22 @@ class MedCatProcessor(NlpProcessor):
         self.app_model = os.getenv("APP_MODEL_NAME", "unknown")
         self.entity_output_mode = os.getenv("ANNOTATIONS_ENTITY_OUTPUT_MODE", "dict").lower()
 
+        # this should be set by a post fork hook
+        self.worker_age = int(os.getenv("GUNICORN_WORKER_AGE", -1))
+        self.cuda_device_count = int(os.getenv("APP_CUDA_DEVICE_COUNT", -1))
+
+        if self.worker_age >= 0 and self.cuda_device_count > 0:
+            # set variables for cuda resource allocation
+            # Needs to be done before loading models
+            # The number of devices to use should be set via
+            # APP_CUDA_DEVICE_COUNT in env_app and the docker compose
+            # file should allocate cards to the container
+            cudaid = self.worker_age % self.cuda_device_count
+            self.log.info("Setting cuda device " + str(cudaid))
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(cudaid)
+        else:
+            self.log.info("worker age or cuda device variables not set")
+
         self.cat = self._create_cat()
         self.cat.train = os.getenv("APP_TRAINING_MODE", False)
 
@@ -70,11 +86,13 @@ class MedCatProcessor(NlpProcessor):
         # this is available to constrain torch threads when there
         # isn't a GPU
         # You probably want to set to 1
+        # Not sure what happens if torch is using a cuda device
         if self.torch_threads > 0:
             import torch
             torch.set_num_threads(self.torch_threads)
             self.log.info("Torch threads set to " + str(self.torch_threads))
 
+            
         self.log.info("MedCAT processor is ready")
 
     def get_app_info(self):
