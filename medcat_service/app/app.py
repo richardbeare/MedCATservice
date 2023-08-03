@@ -36,15 +36,9 @@ def setup_logging():
     if not handler_exists:
         root_logger.addHandler(log_handler)
 
-
-def create_app():
-    """
-    Creates the Flask application using the factory method
-    :return: Flask application
-    """
-    setup_logging()
-
-    # this should be set by a post fork hook
+def setup_cuda():
+    log = logging.getLogger("CUDA resource allocation")
+    # this variabloe should be set by a post fork hook
     # variables need to be set before torch is imported
     worker_age = int(os.getenv("GUNICORN_WORKER_AGE", -1))
     cuda_device_count = int(os.getenv("APP_CUDA_DEVICE_COUNT", -1))
@@ -56,12 +50,20 @@ def create_app():
         # APP_CUDA_DEVICE_COUNT in env_app and the docker compose
         # file should allocate cards to the container
         cudaid = worker_age % cuda_device_count
-        self.log.info("Setting cuda device " + str(cudaid))
+        log.info("Setting cuda device " + str(cudaid))
         os.environ["CUDA_VISIBLE_DEVICES"] = str(cudaid)
     else:
-        self.log.info("worker age or cuda device variables not set")
+        log.info("worker age or cuda device variables not set")
 
-    
+
+def create_app():
+    """
+    Creates the Flask application using the factory method
+    :return: Flask application
+    """
+    setup_logging()
+
+    setup_cuda()
     # create flask app and register API
     app = Flask(__name__)
     app.register_blueprint(api)
