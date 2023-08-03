@@ -44,6 +44,24 @@ def create_app():
     """
     setup_logging()
 
+    # this should be set by a post fork hook
+    # variables need to be set before torch is imported
+    worker_age = int(os.getenv("GUNICORN_WORKER_AGE", -1))
+    cuda_device_count = int(os.getenv("APP_CUDA_DEVICE_COUNT", -1))
+
+    if worker_age >= 0 and cuda_device_count > 0:
+        # set variables for cuda resource allocation
+        # Needs to be done before loading models
+        # The number of devices to use should be set via
+        # APP_CUDA_DEVICE_COUNT in env_app and the docker compose
+        # file should allocate cards to the container
+        cudaid = worker_age % cuda_device_count
+        self.log.info("Setting cuda device " + str(cudaid))
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(cudaid)
+    else:
+        self.log.info("worker age or cuda device variables not set")
+
+    
     # create flask app and register API
     app = Flask(__name__)
     app.register_blueprint(api)
